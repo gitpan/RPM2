@@ -4,9 +4,10 @@ use 5.00503;
 use strict;
 use DynaLoader;
 use Data::Dumper;
+use Cwd qw/realpath/;
 
 use vars qw/$VERSION/;
-$VERSION = '0.44';
+$VERSION = '0.48';
 use vars qw/@ISA/;
 @ISA = qw/DynaLoader/;
 
@@ -14,22 +15,26 @@ bootstrap RPM2 $VERSION;
 
 my %tagmap;
 
-RPM2::_init_rpm();
-RPM2::_populate_header_tags(\%tagmap);
+RPM2_C::_init_rpm();
+RPM2_C::_populate_header_tags(\%tagmap);
+
+sub rpmvercmp {
+  return RPM2_C::rpmvercmp(@_);
+}
 
 sub add_macro {
   my $class = shift;
   my $name = shift;
   my $val = shift;
 
-  RPM2::_add_macro($name, $val);
+  RPM2_C::_add_macro($name, $val);
 }
 
 sub delete_macro {
   my $class = shift;
   my $name = shift;
 
-  RPM2::_delete_macro($name);
+  RPM2_C::_delete_macro($name);
 }
 
 sub open_rpm_db {
@@ -39,11 +44,11 @@ sub open_rpm_db {
   my $self = bless { }, $class;
   if ($params{-path}) {
     $class->add_macro("_dbpath", $params{-path});
-    $self->{db} = RPM2::_open_rpm_db(undef, $params{-readwrite} ? 1 : 0);
+    $self->{db} = RPM2_C::_open_rpm_db($params{-readwrite} ? 1 : 0);
     $class->delete_macro("_dbpath");
   }
   else {
-    $self->{db} = RPM2::_open_rpm_db(undef, $params{-readwrite} ? 1 : 0);
+    $self->{db} = RPM2_C::_open_rpm_db($params{-readwrite} ? 1 : 0);
   }
 
   return $self;
@@ -56,10 +61,10 @@ sub open_package {
   open FH, "<$file"
     or die "Can't open $file: $!";
 
-  my $hdr = RPM2::_read_package_info(*FH);
+  my $hdr = RPM2_C::_read_package_info(*FH);
   close FH;
 
-  $hdr = RPM2::Header->_new_raw($hdr, 1);
+  $hdr = RPM2::Header->_new_raw($hdr, 1, realpath($file));
 
   return $hdr;
 }
@@ -68,7 +73,7 @@ sub close_rpm_db {
   my $self = shift;
   die "db not open" unless $self->{db};
 
-  RPM2::_close_rpm_db($self->{db});
+  RPM2_C::_close_rpm_db($self->{db});
   $self->{db} = undef;
 }
 
@@ -165,10 +170,12 @@ sub _new_raw {
   my $class = shift;
   my $c_header = shift;
   my $need_free = shift;
+  my $filename = shift;
 
   my $self = bless { }, $class;
   $self->{header} = $c_header;
   $self->{need_free} = $need_free;
+  $self->{filename} = $filename if defined $filename;
 
   return $self;
 }
@@ -182,14 +189,14 @@ sub tag {
   die "tag $tag invalid"
     unless exists $tagmap{$tag};
 
-  return RPM2::_header_tag($self->{header}, $tagmap{$tag});
+  return RPM2_C::_header_tag($self->{header}, $tagmap{$tag});
 }
 
 sub compare {
   my $h1 = shift;
   my $h2 = shift;
 
-  return RPM2::_header_compare($h1->{header}, $h2->{header});
+  return RPM2_C::_header_compare($h1->{header}, $h2->{header});
 }
 
 sub op_bool {
@@ -213,7 +220,15 @@ sub op_spaceship {
 sub is_source_package {
   my $self = shift;
 
-  return RPM2::_header_is_source($self->{header});
+  return RPM2_C::_header_is_source($self->{header});
+}
+
+sub filename {
+  my $self = shift;
+  if (exists $self->{filename}) {
+    return $self->{filename};
+  }
+  return;
 }
 
 sub as_nvre {
@@ -271,7 +286,7 @@ sub DESTROY {
   my $self = shift;
 
   if ($self->{need_free}) {
-    RPM2::_free_header(delete $self->{header});
+    RPM2_C::_free_header(delete $self->{header});
   }
 }
 
@@ -283,8 +298,8 @@ sub new_iterator {
   my $tag = shift;
   my $key = shift;
 
-  my $self = bless {}, $class;
-  $self->{iter} = RPM2::_init_iterator($db, $tagmap{$tag}, $key, defined $key ? length $key : 0);
+  my $self = bless { }, $class;
+  $self->{iter} = RPM2_C::_init_iterator($db, $tagmap{$tag}, $key || "", defined $key ? length $key : 0);
   $self->{db} = $db;
 
   return $self;
@@ -295,10 +310,11 @@ sub next {
 
   return unless $self->{iter};
 
-  my $hdr = RPM2::_iterator_next($self->{iter});
+  my $hdr = RPM2_C::_iterator_next($self->{iter});
   return unless $hdr;
 
-  return RPM2::Header->_new_raw($hdr, 1);
+  my $ret = RPM2::Header->_new_raw($hdr, 1);
+  return $ret;
 }
 
 sub expand_iter {
@@ -316,7 +332,7 @@ sub DESTROY {
   my $self = shift;
 
   if ($self->{iter}) {
-    RPM2::_destroy_iter($self->{iter});
+    RPM2_C::_destroy_iterator($self->{iter});
   }
 }
 
@@ -359,7 +375,7 @@ RPM2 - Perl bindings for the RPM Package Manager API
     print $pkg->as_nvre, "\n";
   }
 
-  my $pkg = RPM2->open_package_file("/tmp/XFree86-4.1.0-15.src.rpm");
+  my $pkg = RPM2->open_package("/tmp/XFree86-4.1.0-15.src.rpm");
   print "Package opened: ", $pkg->as_nvre(), ", is source: ", $pkg->is_source_package, "\n";
 
 =head1 DESCRIPTION

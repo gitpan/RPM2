@@ -1,3 +1,6 @@
+#!/usr/bin/perl -w
+use strict;
+
 # Before `make install' is performed this script should be runnable with
 # `make test'. After `make install' it should work as `perl test.pl'
 
@@ -8,7 +11,7 @@
 
 use Test;
 use strict;
-BEGIN { plan tests => 26 };
+BEGIN { plan tests => 28 };
 use RPM2;
 ok(1); # If we made it this far, we're ok.
 
@@ -73,6 +76,7 @@ foreach my $pkg ($db->find_by_requires("/bin/bash")) {
 }
 if (@pkg) {
   ok($pkg[0]->name);
+  ok(not defined $pkg[0]->filename);
 }
 
 my $pkg = RPM2->open_package("test-rpm-1.0-1.noarch.rpm");
@@ -86,6 +90,7 @@ ok($pkg->name eq 'test-rpm');
 ok($pkg->is_source_package);
 
 my $pkg2 = RPM2->open_package("test-rpm-1.0-1.noarch.rpm");
+ok($pkg2->filename);
 ok($pkg->compare($pkg2) == 0);
 ok(($pkg <=> $pkg2) == 0);
 ok(!($pkg < $pkg2));
