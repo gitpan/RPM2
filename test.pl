@@ -11,7 +11,7 @@ use strict;
 
 use Test;
 use strict;
-BEGIN { plan tests => 35 };
+BEGIN { plan tests => 63 };
 use RPM2;
 ok(1); # If we made it this far, we're ok.
 
@@ -87,6 +87,13 @@ ok($pkg->tagformat("--%{NAME}%{VERSION}--") eq '--test-rpm1.0--');
 ok($pkg->tagformat("--%{NAME}%{VERSION}--") ne 'NOT A MATCH');
 ok(!$pkg->is_source_package);
 
+my @cl = $pkg->changelog();
+ok(scalar(@cl) == 1);
+ok($cl[0]->{time} == 1018735200); # Sun Apr 14 2002
+ok($cl[0]->{name} eq 'Chip Turner <cturner@localhost.localdomain>');
+ok($cl[0]->{text} eq '- Initial build.');
+
+
 $pkg = RPM2->open_package("test-rpm-1.0-1.src.rpm");
 ok($pkg);
 ok($pkg->name eq 'test-rpm');
@@ -126,7 +133,7 @@ ok(RPM2->rpm_api_version == 4.0 or RPM2->vsf_nosha1 == 65536);
 $db  = undef;
 $i   = undef;
 
-# 
+#
 # Transaction tests.
 my $t = RPM2->create_transaction();
 ok(ref($t) eq 'RPM2::Transaction');
@@ -165,7 +172,7 @@ $db = undef;
 
 #
 # OK, lets remove that rpm with a new transaction
-my $t = RPM2->create_transaction();
+$t = RPM2->create_transaction();
 ok(ref($t) eq 'RPM2::Transaction');
 # We need to find the package we installed, and try to erase it
 ok($t->add_erase($pkg[0]));
@@ -182,3 +189,7 @@ ok(scalar(@rpms) == 1);
 ok($t->run());
 # Test closing the database
 ok($t->close_db());
+
+my @headers = RPM2->open_hdlist("hdlist-test.hdr");
+ok(scalar @headers, 3, 'found three headers in hdlist-test.hdr');
+ok(grep { $_->tag('name') eq 'mod_perl' } @headers);
