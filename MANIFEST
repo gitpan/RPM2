@@ -8,3 +8,4 @@ test.pl
 test-rpm-1.0-1.noarch.rpm
 test-rpm-1.0-1.src.rpm
 typemap
+META.yml                                Module meta-data (added by MakeMaker)
