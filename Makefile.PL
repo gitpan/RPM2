@@ -16,12 +16,21 @@ if (open FH, "</usr/lib/librpm.la") {
   }
 }
 
+my @defines;
+# detect which rpm is running.  ugly but necessary... for now.
+if (-e '/usr/include/rpm/rpmts.h') {
+  push @defines, '-DRPM2_RPM41';
+}
+else {
+  push @defines, '-DRPM2_RPM40';
+}
+
 WriteMakefile(
     'NAME'		=> 'RPM2',
     'VERSION_FROM'	=> 'RPM2.pm', # finds $VERSION
     'PREREQ_PM'		=> {}, # e.g., Module::Name => 1.1
     'LIBS'		=> [ $libs ], # e.g., '-lm'
-    'DEFINE'		=> '', # e.g., '-DHAVE_SOMETHING'
+    'DEFINE'		=> join(" ", @defines), # e.g., '-DHAVE_SOMETHING'
     'INC'		=> '-I/usr/include/rpm', # e.g., '-I/usr/include/other'
     'TYPEMAPS'          => [ 'typemap' ],
     'OPTIMIZE'          => '-g'
