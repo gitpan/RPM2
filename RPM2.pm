@@ -8,7 +8,7 @@ use File::Basename qw/basename dirname/;
 use File::Spec ();
 
 use vars qw/$VERSION/;
-$VERSION = '0.66';
+$VERSION = '0.67';
 use vars qw/@ISA/;
 @ISA = qw/DynaLoader/;
 
@@ -794,7 +794,11 @@ Initial release
 
 =head1 AUTHOR
 
-Chip Turner E<lt>cturner@redhat.comE<gt>
+Chip Turner E<lt>cturner@pattern.net<gt>
+
+=head1 LICENSE
+
+This module is licensed under the same terms as Perl itself.
 
 =head1 SEE ALSO
 
