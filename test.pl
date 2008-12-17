@@ -13,6 +13,7 @@ use Test;
 use strict;
 BEGIN { plan tests => 63 };
 use RPM2;
+use POSIX;
 ok(1); # If we made it this far, we're ok.
 
 #########################
@@ -107,17 +108,13 @@ ok(($pkg <=> $pkg2) == 0);
 ok(!($pkg < $pkg2));
 ok(!($pkg > $pkg2));
 
+my $other_rpm_dir = getcwd() . '/rpmdb';
 # another rpm, handily provided by the rpmdb-redhat package
-my $other_rpm_dir = "/usr/lib/rpmdb/i386-redhat-linux/redhat";
-if (-d $other_rpm_dir) {
-  my $db2 = RPM2->open_rpm_db(-path => $other_rpm_dir);
-  ok(defined $db2);
-  $db2 = undef;
-}
-else {
-  print "Install the rpmdb-redhat package to test two simultaneous open databases\n";
-  ok(1);
-}
+# ... is no longer shipped. Create a new one:
+system( "rm -rf rpmdb; mkdir rpmdb; /usr/bin/rpmdb --dbpath $other_rpm_dir --initdb" );
+my $db2 = RPM2->open_rpm_db(-path => $other_rpm_dir);
+ok(defined $db2);
+$db2 = undef;
 
 ok(RPM2->expand_macro("%%foo") eq "%foo");
 RPM2->add_macro("rpm2_test_macro", "testval $$");
@@ -125,7 +122,7 @@ ok(RPM2->expand_macro("%rpm2_test_macro") eq "testval $$");
 RPM2->delete_macro("rpm2_test_macro");
 ok(RPM2->expand_macro("%rpm2_test_macro") eq "%rpm2_test_macro");
 
-ok(RPM2->rpm_api_version == 4.1 or RPM2->rpm_api_version == 4.0);
+ok(RPM2->rpm_api_version =~ /4.[016]/);
 ok(RPM2->rpm_api_version == 4.0 or RPM2->vsf_nosha1 == 65536);
 
 #
@@ -152,11 +149,8 @@ ok($t->order());
 my @rpms = $t->elements();
 ok($rpms[0] eq  $pkg->as_nvre());
 ok(scalar(@rpms) == 1);
-# Install package
-ok($t->run());
+skip( ( $< == 0 ) ? undef : ': must be root to create RPM transaction.',  ( $< == 0 ) ? $t->run() : undef );
 $t = undef;
-
-#
 # See if we can find the rpm in the database now...
 $db = RPM2->open_rpm_db();
 ok(defined $db);
@@ -166,7 +160,7 @@ ok($i);
 while (my $pkg = $i->next) {
   push @pkg, $pkg;
 }
-ok(scalar(@pkg) == 1);
+skip( ( $< == 0 ) ? undef : ': package not added as not root.',  ( $< == 0 ) ? scalar(@pkg) == 1 : undef );
 $i  = undef;
 $db = undef;
 
@@ -175,9 +169,9 @@ $db = undef;
 $t = RPM2->create_transaction();
 ok(ref($t) eq 'RPM2::Transaction');
 # We need to find the package we installed, and try to erase it
-ok($t->add_erase($pkg[0]));
+skip( ( $< == 0 ) ? undef : ': package not erased as not root.', ( $< == 0 ) ? $t->add_erase($pkg[0]) : undef );
 # Check element count
-ok($t->element_count() == 1);
+skip( ( $< == 0 ) ? undef : ': no transaction as not root.', ( $< == 0 ) ? ($t->element_count() == 1) : undef );
 # Test depedency checks
 ok($t->check());
 # Order the transaction...see if we get our one transaction.
@@ -186,7 +180,7 @@ ok($t->order());
 ok($rpms[0] eq  $pkg->as_nvre());
 ok(scalar(@rpms) == 1);
 # Install package
-ok($t->run());
+skip( ( $< == 0 ) ? undef : ': cannot run RPM transaction as not root.', ( $< == 0 ) ? $t->run() : undef );
 # Test closing the database
 ok($t->close_db());
 
