@@ -1,28 +1,32 @@
 #include <stdio.h>
 #include <string.h>
-#include <rpmlib.h>
-#include <rpmcli.h>
+#include <rpm/rpmcli.h>
 
-#ifndef RPM2_RPM40
-#  include <rpmts.h>
-#  include <rpmte.h>
+#define RPM_VERSION(major,minor) (major*1000+minor)
+
+#if RPM2_API > RPM_VERSION(4,0)
+#  include <rpm/rpmts.h>
+#  include <rpm/rpmte.h>
 #endif
 
-#include <header.h>
-#include <rpmdb.h>
-#if defined(RPM2_RPM40) || defined(RPM2_RPM41)
-#  include "misc.h"
+#if RPM2_API < RPM_VERSION(4,9)
+#  include <rpm/rpmlib.h>
+#  include <rpm/header.h>
+#  include <rpm/rpmdb.h>
+#endif
+#if RPM2_API < RPM_VERSION(4,6)
+#  include <rpm/misc.h>
 #else
 #  define _RPM_4_4_COMPAT
-#  include <rpmlegacy.h>
+#  include <rpm/rpmlegacy.h>
 #endif
 
 #include "EXTERN.h"
 #include "perl.h"
 #include "XSUB.h"
 
-#if !defined(RPM2_RPM41) && !defined(RPM2_RPM40) && !defined(RPM2_RPM46)
-#error Seems like Makefile.PL could not guess your RPM API version.
+#ifndef RPM2_API
+#  error Seems like Makefile.PL could not guess your RPM API version.
 #endif
 
 /* Chip, this is somewhat stripped down from the default callback used by
@@ -36,7 +40,7 @@
 void * _null_callback(
 	const void * arg, 
 	const rpmCallbackType what,
-#if defined(RPM2_RPM40) || defined(RPM2_RPM41)
+#if RPM2_API < RPM_VERSION(4,6)
 	const unsigned long amount, 
 	const unsigned long total,
 #else 
@@ -68,13 +72,21 @@ void * _null_callback(
 					fd = NULL;
 				}
 			} else
+#if RPM2_API < RPM_VERSION(4,9)
 				fd = fdLink(fd, "persist (showProgress)");
+#else
+				fd = fdLink(fd);
+#endif
 			return (void *)fd;
 	 		break;
 
 	case RPMCALLBACK_INST_CLOSE_FILE:
 		/* FIX: still necessary? */
+#if RPM2_API < RPM_VERSION(4,9)
 		fd = fdFree(fd, "persist (showProgress)");
+#else
+		fd = fdFree(fd);
+#endif
 		if (fd != NULL) {
 			xx = Fclose(fd);
 			fd = NULL;
@@ -140,7 +152,7 @@ void * _null_callback(
 void
 _populate_header_tags(HV *href)
 {
-#if defined(RPM2_RPM40) || defined(RPM2_RPM41)
+#if RPM2_API < RPM_VERSION(4,6)
     int i = 0;
 
     for (i = 0; i < rpmTagTableSize; i++) {
@@ -207,15 +219,10 @@ double
 rpm_api_version(pkg)
 	char * pkg
     CODE:
-#ifdef RPM2_RPM46
-	RETVAL = (double)4.6;
-#endif
-#ifdef RPM2_RPM41
-	RETVAL = (double)4.1;
-#endif
-#ifdef RPM2_RPM40
-	RETVAL = (double)4.0;
-#endif
+	int major = RPM2_API / 1000;
+	double minor = (int)RPM2_API % 1000;
+	while (minor >= 1) { minor /= 10; }
+	RETVAL = major + minor;
     OUTPUT:
 	RETVAL
 
@@ -346,6 +353,7 @@ PPCODE:
 	}
 	Fclose(fd);
 
+#if RPM2_API < RPM_VERSION(4,9)
 
 rpmdb
 _open_rpm_db(for_write)
@@ -358,10 +366,32 @@ _open_rpm_db(for_write)
 		RETVAL = NULL;
 	}
 	RETVAL = db;		
+     OUTPUT:
+	RETVAL
+
+#else
+
+rpmts
+_open_rpm_db(for_write)
+	int   for_write
+    PREINIT:
+	 rpmts ts;
+    CODE:
+	ts = rpmtsCreate();
+	if (rpmtsOpenDB(ts, for_write ? O_RDWR : O_RDONLY)) {
+		croak("rpmtsOpenDB failed");
+		RETVAL = NULL;
+	}
+	RETVAL = ts;
     OUTPUT:
 	RETVAL
 
+#endif
+
+
 MODULE = RPM2		PACKAGE = RPM2::C::DB
+
+#if RPM2_API < RPM_VERSION(4,9)
 
 void
 DESTROY(db)
@@ -390,6 +420,40 @@ _init_iterator(db, rpmtag, key, len)
 	RETVAL = rpmdbInitIterator(db, rpmtag, key && *key ? key : NULL, len);
     OUTPUT:
 	RETVAL
+
+#else
+
+void
+DESTROY(ts)
+	rpmts ts
+    CODE:
+	rpmtsCloseDB(ts);
+	rpmtsFree(ts);
+
+void
+_close_rpm_db(self)
+	rpmts self
+    CODE:
+	rpmtsCloseDB(self);
+	rpmtsFree(self);
+
+rpmdbMatchIterator
+_init_iterator(ts, rpmtag, key, len)
+	rpmts ts
+	int rpmtag
+	char *key
+	size_t len
+    CODE:
+    /* See rpmtsInitIterator() code for explanation of this */
+	if (rpmtag == RPMDBI_PACKAGES) {
+		len = strlen (key);
+	}
+
+	RETVAL = rpmtsInitIterator(ts, rpmtag, len ? key : NULL, len);
+    OUTPUT:
+	RETVAL
+
+#endif
 
 MODULE = RPM2		PACKAGE = RPM2::C::PackageIterator
 Header
@@ -435,7 +499,7 @@ tag_by_id(h, tag)
 	int tag
     PREINIT:
 	void *ret = NULL;
-#if defined(RPM2_RPM40) || defined(RPM2_RPM41)
+#if RPM2_API < RPM_VERSION(4,6)
 	int type;
 #else
 	rpmTagType type;
@@ -549,14 +613,14 @@ _header_sprintf(h, format)
     PREINIT:
 	char * s;
     PPCODE:
-#if defined(RPM2_RPM40) || defined(RPM2_RPM41)
+#if RPM2_API < RPM_VERSION(4,6)
 	s =  headerSprintf(h, format, rpmTagTable, rpmHeaderFormats, NULL);
 #else
 	s =  headerFormat(h, format, NULL);
 #endif
 	PUSHs(sv_2mortal(newSVpv((char *)s, 0)));
 /* By the way, the #if below is completely useless, free() would work for both */
-#if defined(RPM2_RPM40) || defined(RPM2_RPM41)
+#if RPM2_API < RPM_VERSION(4,6)
 	s = _free(s);
 #else
 	free(s);

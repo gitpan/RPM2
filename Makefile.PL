@@ -4,6 +4,7 @@ use ExtUtils::MakeMaker;
 
 my $extra_libs = $ENV{EXTRALIBS};
 my $libs = "$extra_libs -lrpm -lrpmdb -lrpmio -lpopt";
+my $include = "-I/usr/include";
 
 # try to be smart about which shared libs we should load.
 # use the .la file.  probably linux only.
@@ -24,19 +25,27 @@ if (open FH, "<$filename") {
 }
 
 my @defines;
+
 # detect which rpm is running.  ugly but necessary... for now.
 # ^^^ (Poor you, if only you knew I'll make it much worse -- lkundrak)
-if (`pkg-config rpm --modversion` =~ /^(\d+)\.(\d+).*/) {
-  my ($major, $minor) = ($1, $2);
-  ($major, $minor) = (4,6) if $major >= 4 and $minor > 6;
-  push @defines, "-DRPM2_RPM$major$minor";
+my ($major, $minor) = (4,0);
+if (`pkg-config rpm --modversion 2>/dev/null` =~ /^(\d+)\.(\d+).*/) {
+  ($major, $minor) = ($1, $2);
+  if ($major >= 4 and $minor => 9) {
+    ($major, $minor) = (4,9)
+  } elsif ($major >= 4 and $minor => 6) {
+    ($major, $minor) = (4,6)
+  }
 }
 elsif (-e '/usr/include/rpm/rpmts.h') {
-  push @defines, '-DRPM2_RPM41';
+  ($major, $minor) = (4,1)
 }
-else {
-  push @defines, '-DRPM2_RPM40';
-}
+
+`pkg-config rpm --libs 2>/dev/null` =~ /(.+)/ and $libs = $1;
+`pkg-config rpm --cflags-only-I 2>/dev/null` =~ /(.+)/ and $include = $1;
+
+push @defines, "-DRPM2_RPM$major$minor";
+push @defines, sprintf "-DRPM2_API=%i%03i", $major, $minor;
 
 WriteMakefile(
     'NAME'		=> 'RPM2',
@@ -44,7 +53,7 @@ WriteMakefile(
     'PREREQ_PM'		=> {}, # e.g., Module::Name => 1.1
     'LIBS'		=> [ $libs ], # e.g., '-lm'
     'DEFINE'		=> join(" ", @defines), # e.g., '-DHAVE_SOMETHING'
-    'INC'		=> '-I/usr/include/rpm', # e.g., '-I/usr/include/other'
+    'INC'		=> $include, # e.g., '-I/usr/include/other'
     'TYPEMAPS'          => [ 'typemap' ],
     'OPTIMIZE'          => '-g'
 );
