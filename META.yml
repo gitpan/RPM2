@@ -1,20 +1,34 @@
---- #YAML:1.0
-name:               RPM2
-version:            0.70
-abstract:           ~
-author:  []
-license:            unknown
-distribution_type:  module
-configure_requires:
-    ExtUtils::MakeMaker:  0
+---
+name: RPM2
+version: 1.0
+author:
+  - 'Lubomir Rintel <lkundrak@v3.sk>'
+abstract: Perl bindings for the RPM Package Manager API
+license: perl
 build_requires:
-    ExtUtils::MakeMaker:  0
-requires:  {}
-no_index:
-    directory:
-        - t
-        - inc
-generated_by:       ExtUtils::MakeMaker version 6.55_02
+  ExtUtils::CBuilder: 0
+requires:
+  File::Basename: 0
+  File::Spec: 0
+configure_requires:
+  Module::Build: 0.35
+generated_by: Module::Build version 0.35
 meta-spec:
-    url:      http://module-build.sourceforge.net/META-spec-v1.4.html
-    version:  1.4
+  url: http://module-build.sourceforge.net/META-spec-v1.4.html
+  version: 1.4
+provides:
+  RPM2:
+    file: lib/RPM2.pm
+    version: 1.0
+  RPM2::DB:
+    file: lib/RPM2.pm
+  RPM2::Header:
+    file: lib/RPM2.pm
+  RPM2::PackageIterator:
+    file: lib/RPM2.pm
+  RPM2::Transaction:
+    file: lib/RPM2.pm
+resources:
+  bugtracker: "http://rt.cpan.org/NoAuth/Bugs.html?Dist=RPM2"
+  license: http://dev.perl.org/licenses/
+  repository: git://git.fedorahosted.org/perl-RPM2.git
